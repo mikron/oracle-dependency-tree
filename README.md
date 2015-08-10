@@ -10,7 +10,7 @@ p_Dependencies.printDependencies(av_schema => &param_schema&,
 end;
 ```
 In the code replace the `&param_...&` variables with your desired input.
-while the other parameters are obvious the ai_MaxDepth parameter is the
-nested dependencies level parameter, you can try 1, 2, 3, 4, ... values
+while the other parameters are obvious the `ai_MaxDepth` parameter is the
+nested dependencies level parameter, you can try `1, 2, 3, 4, ...` values
 and you will get the results. Be careful it can take a while for the big
 number for the ai_MaxDepth parameter.
