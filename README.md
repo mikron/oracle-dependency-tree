@@ -11,12 +11,12 @@ end;
 ```
 In the code replace the `&param_...&` variables with your desired input. Here is 
 the description of the parameters.
-	`av_schema` - the schema name, default value is the schema, where the package
+* `av_schema` - the schema name, default value is the schema, where the package
 		is called
-	`av_type` - the type of the object `PROCEDURE`,`PACKAGE BODY`,`PACKAGE`,`TYPE BODY`,
+* `av_type` - the type of the object `PROCEDURE`,`PACKAGE BODY`,`PACKAGE`,`TYPE BODY`,
 			`TRIGGER`,`MATERIALIZED	VIEW`,`FUNCTION`,`VIEW`,`JAVA CLASS`,`INDEX`,`TYPE` etc
-	`av_name` - object name in upper cases.
-	`ai_MaxDepth` - the nested dependencies layer count.
+* `av_name` - object name in upper cases.
+* `ai_MaxDepth` - the nested dependencies layer count.
 
 while the other parameters are obvious the `ai_MaxDepth` parameter is the
 nested dependencies level parameter, you can try `1, 2, 3, 4, ...` values
