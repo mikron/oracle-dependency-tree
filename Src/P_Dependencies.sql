@@ -19,17 +19,17 @@ create or replace package body P_Dependencies is
 
    -- Dependencies source cursor and table type declarations
    cursor cur_ref(av_Schema varchar2, av_Type varchar2, av_Name varchar2) is
-      select /*replace(TRoot, ' BODY') || '->' || */
-       replace(TVal, ' BODY') TRoot, referenced_owner, referenced_type,
-       referenced_name,
-       case
-          when referenced_type in ('TABLE', 'VIEW') then
-           0
-          else
-           1
-       end OrderCol
+      select distinct replace(TVal, ' BODY') TRoot, referenced_owner,
+                      replace(referenced_type, ' BODY') referenced_type,
+                      referenced_name,
+                      case
+                         when referenced_type in ('TABLE', 'VIEW') then
+                          0
+                         else
+                          1
+                      end OrderCol
         from (select owner, type, name, referenced_owner, referenced_type,
-                      referenced_name, owner || '.' || type || '.' || name TRoot,
+                      referenced_name,
                       referenced_owner || '.' || referenced_type || '.' ||
                        referenced_name TVal
                  from dba_dependencies d
