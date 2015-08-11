@@ -2,27 +2,32 @@ create or replace package P_Dependencies is
 
    -- Author  : DAVIT
    -- Created : 10/08/15 17:33:27
-   -- Purpose : 
+   -- Purpose :
 
-   procedure PrintDependencies(av_Schema varchar2, av_Type varchar2,
-                              av_Name varchar2, ai_MaxDepth int := 1);
+   function L_GetPart(av_source varchar2, av_separator varchar2,
+                      ai_nth pls_integer) return varchar2;
+
+   procedure PrintDependencies(av_Schema varchar2 := user, av_Type varchar2,
+                               av_Name varchar2, ai_MaxDepth int := 1);
 
 end P_Dependencies;
 /
 create or replace package body P_Dependencies is
 
-   
+   -- Symbols
+   cv_Sep constant varchar2(2) := '->';
 
    -- Dependencies source cursor and table type declarations
    cursor cur_ref(av_Schema varchar2, av_Type varchar2, av_Name varchar2) is
-      select replace(TRoot, ' BODY') || '->' || replace(TVal, ' BODY') TRoot,
-             referenced_owner, referenced_type, referenced_name,
-             case
-                when referenced_type in ('TABLE', 'VIEW') then
-                 0
-                else
-                 1
-             end OrderCol
+      select /*replace(TRoot, ' BODY') || '->' || */
+       replace(TVal, ' BODY') TRoot, referenced_owner, referenced_type,
+       referenced_name,
+       case
+          when referenced_type in ('TABLE', 'VIEW') then
+           0
+          else
+           1
+       end OrderCol
         from (select owner, type, name, referenced_owner, referenced_type,
                       referenced_name, owner || '.' || type || '.' || name TRoot,
                       referenced_owner || '.' || referenced_type || '.' ||
@@ -38,7 +43,49 @@ create or replace package body P_Dependencies is
        order by referenced_owner, OrderCol, referenced_type, referenced_name;
 
    type T_CurRef is table of cur_ref%rowtype;
-   type TT_Tree is table of int index by varchar2(4000);
+   type TT_Tree is table of pls_integer index by varchar2(4000);
+
+   -- String manipulation funciton
+   function L_GetPart(av_source varchar2, av_separator varchar2,
+                      ai_nth pls_integer) return varchar2 is
+      li_Sep pls_integer := length(av_Separator);
+      li_Begin pls_integer := 1 - li_Sep;
+      li_End pls_integer;
+      lv_Output long;
+   begin
+      if ai_Nth = -1 then
+         li_Begin := instr(av_source, av_separator, ai_Nth);
+         if li_Begin = 0 then
+            return null;
+         end if;
+      else
+         li_End := instr(av_source, av_separator, 1, ai_nth);
+         put(li_End);
+         if ai_Nth > 1 then
+            li_Begin := instr(av_source, av_separator, 1, ai_nth - 1);
+            if li_Begin = 0 then
+               return null;
+            end if;
+         end if;
+      end if;
+      if li_End > 0 then
+         lv_Output := substr(av_Source, li_Begin + li_Sep,
+                             li_End - li_Begin - li_Sep);
+      elsif length(av_Source) >= li_Begin + li_Sep then
+         lv_Output := substr(av_Source, li_Begin + li_Sep,
+                             length(av_Source) - li_Begin);
+      end if;
+      return lv_Output;
+   end;
+
+   -- procedure to sort Array
+   procedure printSorted(at_Tree TT_Dependencies) is
+   begin
+      for R in (select * from table(at_Tree) order by 1, 2) loop
+         dbms_output.put_line('Level = ' || R.lvl || '; Root = ' ||
+                              ltrim(R.Tree, cv_Sep));
+      end loop;
+   end;
 
    -- Procedure to PrintArray
    procedure printTree(at_Tree TT_Tree) is
@@ -47,17 +94,18 @@ create or replace package body P_Dependencies is
       lv_idx := at_Tree.first;
       while (lv_idx is not null) loop
          if at_Tree(lv_idx) > 0 then
-            dbms_output.put_line('Level = ' || at_Tree(lv_idx) || '; Root = ' || ltrim(lv_idx, '->'));
+            dbms_output.put_line('Level = ' || at_Tree(lv_idx) || '; Root = ' ||
+                                 ltrim(lv_idx, cv_Sep));
          end if;
          lv_idx := at_Tree.next(lv_idx);
       end loop;
    end;
 
    procedure PrintDependencies(av_Schema varchar2, av_Type varchar2,
-                              av_Name varchar2, ai_MaxDepth int := 1) is
+                               av_Name varchar2, ai_MaxDepth int := 1) is
    
       -- Tree of dependencies
-      Tree TT_Tree;
+      Tree TT_Dependencies := TT_Dependencies();
       Idx TT_Tree;
       li_Depth int := 0;
    
@@ -67,10 +115,14 @@ create or replace package body P_Dependencies is
          Src T_CurRef;
          lv_ParentKey varchar2(4000);
       begin
-         lv_ParentKey := av_ParentKey || '->' || av_Schema || '.' || av_Type || '.' ||
-                         av_Name;
+         if L_GetPart(av_ParentKey, cv_Sep, -1) =
+            av_Schema || '.' || av_Type || '.' || av_Name then
+            lv_ParentKey := av_ParentKey;
+         else
+            lv_ParentKey := av_ParentKey || cv_Sep || av_Schema || '.' ||
+                            av_Type || '.' || av_Name;
+         end if;
          if Idx.exists(lv_ParentKey) then
-         
             return;
          else
             Idx(lv_ParentKey) := ai_Depth + 1;
@@ -87,7 +139,10 @@ create or replace package body P_Dependencies is
       
          for li in 1 .. Src.count loop
             if Src(li).Referenced_Type in ('TABLE', 'VIEW') then
-               Tree(lv_ParentKey || '->' || Src(li).TRoot) := Idx(lv_ParentKey);
+               Tree.extend;
+               Tree(Tree.count) := TO_Dependencies(Idx(lv_ParentKey),
+                                                   lv_ParentKey || cv_Sep ||
+                                                    Src(li).TRoot);
             else
                T_Dep(Src(li).Referenced_owner, Src(li).Referenced_type,
                      Src(li).Referenced_name, lv_ParentKey, Idx(lv_ParentKey));
@@ -97,7 +152,7 @@ create or replace package body P_Dependencies is
    
    begin
       T_Dep(av_Schema, av_Type, av_Name, '', li_Depth);
-      printTree(Tree);
+      printSorted(Tree);
    end;
 
 end P_Dependencies;
