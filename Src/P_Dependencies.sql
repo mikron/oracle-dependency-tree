@@ -51,7 +51,7 @@ create or replace package body P_Dependencies is
       li_Sep pls_integer := length(av_Separator);
       li_Begin pls_integer := 1 - li_Sep;
       li_End pls_integer;
-      lv_Output long;
+      lv_Output varchar2(32767);
    begin
       if ai_Nth = -1 then
          li_Begin := instr(av_source, av_separator, ai_Nth);
@@ -60,7 +60,6 @@ create or replace package body P_Dependencies is
          end if;
       else
          li_End := instr(av_source, av_separator, 1, ai_nth);
-         put(li_End);
          if ai_Nth > 1 then
             li_Begin := instr(av_source, av_separator, 1, ai_nth - 1);
             if li_Begin = 0 then
