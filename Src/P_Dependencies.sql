@@ -9,7 +9,7 @@ create or replace package P_Dependencies is
 
    procedure PrintDependencies(av_Schema varchar2 := user, av_Type varchar2,
                                av_Name varchar2, ai_MaxDepth int := 1);
-                               
+
    function c_GetPkgProcedureCodeStyled(av_SchemaName varchar2 := user,
                                         av_ObjName varchar2,
                                         av_ObjType varchar2 := 'PACKAGE BODY',
@@ -33,7 +33,8 @@ create or replace package body P_Dependencies is
 
    -- Dependencies source cursor and table type declarations
    cursor cur_ref(av_Schema varchar2, av_Type varchar2, av_Name varchar2) is
-      select distinct TVal TRoot, referenced_owner, referenced_type,
+      select distinct replace(TVal, ' BODY') TRoot, referenced_owner,
+                      replace(referenced_type, ' BODY') referenced_type,
                       referenced_name,
                       case
                          when referenced_type in ('TABLE', 'VIEW') then
@@ -47,12 +48,12 @@ create or replace package body P_Dependencies is
                        referenced_name TVal
                  from dba_dependencies d
                 where d.owner = av_Schema
-                  and d.type = av_Type
+                  and replace(d.type, ' BODY') = replace(av_Type, ' BODY')
                   and name = av_Name
                   and referenced_type in
                       ('PACKAGE', 'PACKAGE BODY', 'FUNCTION', 'PROCEDURE',
                        'TRIGGER', 'TYPE', 'TYPE BODY', 'TABLE', 'VIEW')
-                  and d.referenced_owner = av_Schema)
+                  and d.referenced_owner not in ('SYS'))
        order by referenced_owner, OrderCol, referenced_type, referenced_name;
 
    type T_CurRef is table of cur_ref%rowtype;
@@ -190,30 +191,30 @@ create or replace package body P_Dependencies is
       lc clob;
    begin
       for Src in (with package_source as
-                 (select Line, lower(text) Text, max(Line) over() MaxLine
-                    from dba_source
-                   where owner = av_SchemaName
-                     and name = av_ObjName
-                     and type = av_ObjType),
-                first_line as
-                 (select max(line) line
+                   (select Line, lower(text) Text, max(Line) over() MaxLine
+                     from dba_source
+                    where owner = av_SchemaName
+                      and name = av_ObjName
+                      and type = av_ObjType),
+                  first_line as
+                   (select max(line) line
+                     from package_source
+                    where instr(Text,
+                                lower(av_SubObjType || ' ' || av_SubObjName)) > 0),
+                  last_line as
+                   (select min(line) line
+                     from package_source
+                    where instr(Text, 'end ' || lower(av_SubObjName) || ';') > 0)
+                  select Text
                     from package_source
-                   where instr(Text, lower(av_SubObjType || ' ' || av_SubObjName)) > 0),
-                last_line as
-                 (select min(line) line
-                    from package_source
-                   where instr(Text, 'end ' || lower(av_SubObjName) || ';') > 0)
-                select Text
-                  from package_source
-                 where line between (select line from first_line) and
-                       (select line from last_line)
-              order by line) loop
-                       lc := lc || Src.Text;
+                   where line between (select line from first_line) and
+                         (select line from last_line)
+                   order by line) loop
+        lc := lc || Src.Text;
       end loop;
       return lc;
    end;
-   
-   
+
    -- Retrieve the procedure code from the package source code
    -- Not working for the overloaded procedures
    function c_GetPkgProcedureCode(av_SchemaName varchar2 := user,
@@ -225,43 +226,43 @@ create or replace package body P_Dependencies is
       lc clob;
    begin
       for Src in (with package_source as
-                 (select Line, lower(Text) Text, max(Line) over() MaxLine
-                    from dba_source
-                   where owner = av_SchemaName
-                     and type = av_ObjType
-                     and name = av_ObjName),
-                package_procs as
-                 (select f.Procedure_Name
-                    from dba_procedures f
-                   where owner = av_SchemaName
-                     and object_type = replace(av_ObjType, ' BODY')
-                     and f.Object_Name = av_ObjName),
-                first_line as
-                 (select max(line) LineNo
-                    from package_source
-                   where instr(lower(text), lower(av_SubObjType || ' ' || av_SubObjName)) > 0),
-                last_line as
-                 (select min(line) LineNo
-                    from Package_Source p
-                   where Line > (select LineNo from First_Line)
-                     and exists
-                   (select *
-                            from Package_Procs
-                           where (instr(p.text, 'procedure ' || lower(Procedure_Name)) > 0 or
-                                 instr(p.text, 'function ' || lower(Procedure_Name)) > 0)))
-                select Text
-                  from Package_Source
-                 where Line >= (select LineNo from first_line)
-                   and Line < nvl((select LineNo from last_line), MaxLine)
-              order by Line) loop
-              lc := lc || Src.Text;
+                   (select Line, lower(Text) Text, max(Line) over() MaxLine
+                     from dba_source
+                    where owner = av_SchemaName
+                      and type = av_ObjType
+                      and name = av_ObjName),
+                  package_procs as
+                   (select f.Procedure_Name
+                     from dba_procedures f
+                    where owner = av_SchemaName
+                      and object_type = replace(av_ObjType, ' BODY')
+                      and f.Object_Name = av_ObjName),
+                  first_line as
+                   (select max(line) LineNo
+                     from package_source
+                    where instr(lower(text),
+                                lower(av_SubObjType || ' ' || av_SubObjName)) > 0),
+                  last_line as
+                   (select min(line) LineNo
+                     from Package_Source p
+                    where Line > (select LineNo from First_Line)
+                      and exists
+                    (select *
+                             from Package_Procs
+                            where (instr(p.text,
+                                         'procedure ' || lower(Procedure_Name)) > 0 or
+                                  instr(p.text,
+                                         'function ' || lower(Procedure_Name)) > 0)))
+                  select Text
+                    from Package_Source
+                   where Line >= (select LineNo from first_line)
+                     and Line < nvl((select LineNo from last_line), MaxLine)
+                   order by Line) loop
+        lc := lc || Src.Text;
       end loop;
       return lc;
-   exception
-      when no_Data_Found then
-         return null;
    end;
-   
+
    -- print dependencies for the procedure inside the package
    procedure PrintPkgDependencies(av_SchemaName varchar2 := user,
                                   av_ObjName varchar2,
