@@ -17,6 +17,13 @@ create or replace package P_Dependencies is
                                         av_SubObjType varchar2 := 'PROCEDURE')
       return clob;
 
+   function c_GetPkgProcedureCode(av_SchemaName varchar2 := user,
+                                  av_ObjName varchar2,
+                                  av_ObjType varchar2 := 'PACKAGE BODY',
+                                  av_SubObjName varchar2,
+                                  av_SubObjType varchar2 := 'PROCEDURE')
+      return clob;
+   
    procedure PrintPkgDependencies(av_SchemaName varchar2 := user,
                                   av_ObjName varchar2,
                                   av_ObjType varchar2 := 'PACKAGE BODY',
@@ -29,7 +36,7 @@ create or replace package body P_Dependencies is
 
    -- Symbols
    cv_Sep constant varchar2(2) := '->';
-   cv_DummyPro constant varchar2(30) := 'DUMMYPROCEDUREFORDEPENDENCIES';
+   cv_DummyPro constant varchar2(30) := 'dummyprocedurefordependencies';
 
    -- Dependencies source cursor and table type declarations
    cursor cur_ref(av_Schema varchar2, av_Type varchar2, av_Name varchar2) is
@@ -197,14 +204,26 @@ create or replace package body P_Dependencies is
                       and name = av_ObjName
                       and type = av_ObjType),
                   first_line as
-                   (select max(line) line
-                     from package_source
-                    where instr(Text,
-                                lower(av_SubObjType || ' ' || av_SubObjName)) > 0),
+                   (select line
+                     from (select line
+                             from package_source
+                            where instr(Text,
+                                        lower(av_SubObjType || ' ' ||
+                                              av_SubObjName)) > 0
+                            order by utl_match.edit_distance_similarity(text,
+                                                                        lower(av_SubObjType || ' ' ||
+                                                                              av_SubObjName)) desc)
+                    where rownum = 1),
                   last_line as
-                   (select min(line) line
-                     from package_source
-                    where instr(Text, 'end ' || lower(av_SubObjName) || ';') > 0)
+                   (select *
+                     from (select line
+                             from package_source
+                            where instr(Text,
+                                        'end ' || lower(av_SubObjName) || ';') > 0
+                            order by utl_match.edit_distance_similarity(Text,
+                                                                        'end ' ||
+                                                                        lower(av_SubObjName) || ';') desc)
+                    where rownum = 1)
                   select Text
                     from package_source
                    where line between (select line from first_line) and
@@ -238,10 +257,16 @@ create or replace package body P_Dependencies is
                       and object_type = replace(av_ObjType, ' BODY')
                       and f.Object_Name = av_ObjName),
                   first_line as
-                   (select max(line) LineNo
-                     from package_source
-                    where instr(lower(text),
-                                lower(av_SubObjType || ' ' || av_SubObjName)) > 0),
+                   (select LineNo
+                     from (select line LineNo
+                             from package_source
+                            where instr(text,
+                                        lower(av_SubObjType || ' ' ||
+                                              av_SubObjName)) > 0
+                            order by utl_match.edit_distance_similarity(Text,
+                                                                        lower(av_SubObjType || ' ' ||
+                                                                              av_SubObjName)) desc)
+                    where rownum = 1),
                   last_line as
                    (select min(line) LineNo
                      from Package_Source p
@@ -281,12 +306,20 @@ create or replace package body P_Dependencies is
       end if;
       if lc_ProCode is not null then
          execute immediate 'create ' ||
-                           replace(lc_ProCode,
-                                   lower(av_SubObjType || ' ' || av_SubObjName),
-                                   'procedure ' || cv_DummyPro);
-         PrintDependencies(av_SchemaName, av_SubObjType, cv_DummyPro,
+                           replace(replace(lc_ProCode,
+                                           lower(av_SubObjType || ' ' ||
+                                                  av_SubObjName),
+                                           av_SubObjType || ' ' || cv_DummyPro),
+                                   'end ' || lower(av_SubObjName),
+                                   'end ' || cv_DummyPro);
+         PrintDependencies(av_SchemaName, av_SubObjType, upper(cv_DummyPro),
                            ai_MaxDepth => 1);
-         execute immediate 'drop ' || av_SubObjType || ' ' || cv_DummyPro;
+         for O in (select *
+                     from dba_objects d
+                    where d.object_name = upper(cv_DummyPro)) loop
+            execute immediate 'drop ' || o.object_type || ' ' || o.owner || '.' ||
+                              o.object_name;
+         end loop;
       end if;
    end;
 
