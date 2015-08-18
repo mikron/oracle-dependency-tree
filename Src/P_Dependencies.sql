@@ -23,7 +23,7 @@ create or replace package P_Dependencies is
                                   av_SubObjName varchar2,
                                   av_SubObjType varchar2 := 'PROCEDURE')
       return clob;
-   
+
    procedure PrintPkgDependencies(av_SchemaName varchar2 := user,
                                   av_ObjName varchar2,
                                   av_ObjType varchar2 := 'PACKAGE BODY',
@@ -229,8 +229,8 @@ create or replace package body P_Dependencies is
                    where line between (select line from first_line) and
                          (select line from last_line)
                    order by line) loop
-        lc := lc || Src.Text;
-      end loop;
+      lc := lc || Src.Text;
+    end loop;
       return lc;
    end;
 
@@ -283,9 +283,19 @@ create or replace package body P_Dependencies is
                    where Line >= (select LineNo from first_line)
                      and Line < nvl((select LineNo from last_line), MaxLine)
                    order by Line) loop
-        lc := lc || Src.Text;
-      end loop;
+      lc := lc || Src.Text;
+    end loop;
       return lc;
+   end;
+
+   procedure dropProcedure(av_ProcName varchar2) is
+   begin
+      for O in (select *
+                  from dba_objects d
+                 where d.object_name = upper(av_ProcName)) loop
+         execute immediate 'drop ' || o.object_type || ' ' || o.owner || '.' ||
+                           o.object_name;
+      end loop;
    end;
 
    -- print dependencies for the procedure inside the package
@@ -305,6 +315,7 @@ create or replace package body P_Dependencies is
                                              av_SubObjType);
       end if;
       if lc_ProCode is not null then
+         dropProcedure(cv_DummyPro);
          execute immediate 'create ' ||
                            replace(replace(lc_ProCode,
                                            lower(av_SubObjType || ' ' ||
@@ -314,12 +325,7 @@ create or replace package body P_Dependencies is
                                    'end ' || cv_DummyPro);
          PrintDependencies(av_SchemaName, av_SubObjType, upper(cv_DummyPro),
                            ai_MaxDepth => 1);
-         for O in (select *
-                     from dba_objects d
-                    where d.object_name = upper(cv_DummyPro)) loop
-            execute immediate 'drop ' || o.object_type || ' ' || o.owner || '.' ||
-                              o.object_name;
-         end loop;
+         dropProcedure(cv_DummyPro);
       end if;
    end;
 
