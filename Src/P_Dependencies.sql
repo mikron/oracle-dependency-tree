@@ -7,6 +7,10 @@ create or replace package P_Dependencies is
    function L_GetPart(av_source varchar2, av_separator varchar2,
                       ai_nth pls_integer) return varchar2;
 
+   function GetDependencies(av_Schema varchar2, av_Type varchar2,
+                            av_Name varchar2, ai_MaxDepth int := 1)
+      return TT_Dependencies;
+
    procedure PrintDependencies(av_Schema varchar2 := user, av_Type varchar2,
                                av_Name varchar2, ai_MaxDepth int := 1);
 
@@ -23,6 +27,13 @@ create or replace package P_Dependencies is
                                   av_SubObjName varchar2,
                                   av_SubObjType varchar2 := 'PROCEDURE')
       return clob;
+      
+   function GetPkgDependencies(av_SchemaName varchar2 := user,
+                               av_ObjName varchar2,
+                               av_ObjType varchar2 := 'PACKAGE BODY',
+                               av_SubObjName varchar2,
+                               av_SubObjType varchar2 := 'PROCEDURE')
+      return TT_Dependencies;
 
    procedure PrintPkgDependencies(av_SchemaName varchar2 := user,
                                   av_ObjName varchar2,
@@ -44,7 +55,7 @@ create or replace package body P_Dependencies is
                       replace(referenced_type, ' BODY') referenced_type,
                       referenced_name,
                       case
-                         when referenced_type in ('TABLE', 'VIEW') then
+                         when referenced_type in ('TABLE', 'VIEW', 'SYNONYM') then
                           0
                          else
                           1
@@ -59,7 +70,7 @@ create or replace package body P_Dependencies is
                   and name = av_Name
                   and referenced_type in
                       ('PACKAGE', 'PACKAGE BODY', 'FUNCTION', 'PROCEDURE',
-                       'TRIGGER', 'TYPE', 'TYPE BODY', 'TABLE', 'VIEW')
+                       'TRIGGER', 'TYPE', 'TYPE BODY', 'TABLE', 'VIEW', 'SYNONYM')
                   and d.referenced_owner not in ('SYS'))
        order by referenced_owner, OrderCol, referenced_type, referenced_name;
 
@@ -299,11 +310,12 @@ create or replace package body P_Dependencies is
    end;
 
    -- print dependencies for the procedure inside the package
-   procedure PrintPkgDependencies(av_SchemaName varchar2 := user,
-                                  av_ObjName varchar2,
-                                  av_ObjType varchar2 := 'PACKAGE BODY',
-                                  av_SubObjName varchar2,
-                                  av_SubObjType varchar2 := 'PROCEDURE') is
+   function GetPkgDependencies(av_SchemaName varchar2 := user,
+                               av_ObjName varchar2,
+                               av_ObjType varchar2 := 'PACKAGE BODY',
+                               av_SubObjName varchar2,
+                               av_SubObjType varchar2 := 'PROCEDURE')
+      return TT_Dependencies is
       lc_ProCode clob;
    begin
       lc_ProCode := c_GetPkgProcedureCodeStyled(av_SchemaName, av_ObjName,
@@ -323,10 +335,22 @@ create or replace package body P_Dependencies is
                                            av_SubObjType || ' ' || cv_DummyPro),
                                    'end ' || lower(av_SubObjName),
                                    'end ' || cv_DummyPro);
-         PrintDependencies(av_SchemaName, av_SubObjType, upper(cv_DummyPro),
-                           ai_MaxDepth => 1);
-         dropProcedure(cv_DummyPro);
+         return GetDependencies(av_SchemaName, av_SubObjType,
+                                upper(cv_DummyPro), ai_MaxDepth => 1);
       end if;
+      return TT_Dependencies();
+   end;
+   
+   -- print dependencies for the procedure inside the package
+   procedure PrintPkgDependencies(av_SchemaName varchar2 := user,
+                                  av_ObjName varchar2,
+                                  av_ObjType varchar2 := 'PACKAGE BODY',
+                                  av_SubObjName varchar2,
+                                  av_SubObjType varchar2 := 'PROCEDURE') is
+   begin
+      printSorted(GetPkgDependencies(av_SchemaName, av_ObjName, av_ObjType,
+                                     av_SubObjName, av_SubObjType));
+      dropProcedure(cv_DummyPro);
    end;
 
 end P_Dependencies;
