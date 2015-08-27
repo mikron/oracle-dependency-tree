@@ -171,7 +171,7 @@ create or replace package body P_Dependencies is
          close cur_Ref;
       
          for li in 1 .. Src.count loop
-            if Src(li).Referenced_Type in ('TABLE', 'VIEW') then
+            if Src(li).Referenced_Type in ('TABLE', 'VIEW', 'SYNONYM') then
                Tree.extend;
                Tree(Tree.count) := TO_Dependencies(Idx(lv_ParentKey),
                                                    lv_ParentKey || cv_Sep ||
