@@ -1,4 +1,4 @@
-# DependenciesTree
+# Package and procedures dependencies tree
 After compiling the package you can use the code bellow to call the procedure 
 ```PLSQL
 begin
